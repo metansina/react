@@ -1,9 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function Lobby() {
-  const [playerName, setPlayerName] = useState('');
-  const [isNameSet, setIsNameSet] = useState(false);
+  const [searchParams] = useSearchParams();
+  const returnedPlayer = searchParams.get('player');
+  
+  const [playerName, setPlayerName] = useState(returnedPlayer || '');
+  const [isNameSet, setIsNameSet] = useState(!!returnedPlayer);
   const navigate = useNavigate();
 
   const setName = () => {
@@ -47,6 +50,10 @@ export default function Lobby() {
         <div className="game-item" onClick={() => selectGame('tic-tac-toe')}>
           <h3>Tic-Tac-Toe</h3>
           <p>Classic X's and O's game</p>
+        </div>
+        <div className="game-item" onClick={() => selectGame('big-tic-tac-toe')}>
+          <h3>Big Tic-Tac-Toe</h3>
+          <p>30x30 board, get 5 in a row to win</p>
         </div>
       </div>
     </div>
