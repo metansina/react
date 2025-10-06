@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import socket from './socket';
 
 function Square({value, onSquareClick, isWinning}) {
   return (
@@ -72,6 +73,10 @@ export default function GameRoom() {
   
   const playerName = searchParams.get('player');
   const isHost = searchParams.get('host') === 'true';
+
+  useEffect(() => {
+    socket.emit('joinEvent', roomId);
+  }, [roomId]);
   
   const [history, setHistory] = useState([Array(9).fill(null)]);
   const [currentMove, setCurrentMove] = useState(0);
@@ -120,7 +125,10 @@ export default function GameRoom() {
       <div className="room-header">
         <h2>Room {roomId}</h2>
         <p>Player: {playerName} {isHost && '(Host)'}</p>
-        <button onClick={() => navigate(`/?player=${encodeURIComponent(playerName)}`)}>Back to Lobby</button>
+        <button onClick={() => {
+          socket.emit('leaveEvent');
+          navigate(`/?player=${encodeURIComponent(playerName)}`);
+        }}>Back to Lobby</button>
       </div>
       
       <div className="game">

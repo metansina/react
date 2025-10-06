@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import socket from './socket';
 
 function BigSquare({value, onSquareClick, isWinning}) {
   return (
@@ -71,6 +72,10 @@ export default function BigTicTacToe() {
   const navigate = useNavigate();
   
   const playerName = searchParams.get('player');
+
+  useEffect(() => {
+    socket.emit('joinEvent', roomId);
+  }, [roomId]);
   
   const [squares, setSquares] = useState(Array(900).fill(null));
   const [xIsNext, setXIsNext] = useState(true);
@@ -85,7 +90,10 @@ export default function BigTicTacToe() {
       <div className="room-header">
         <h2>Big Tic-Tac-Toe - Room {roomId}</h2>
         <p>Player: {playerName}</p>
-        <button onClick={() => navigate(`/?player=${encodeURIComponent(playerName)}`)}>Back to Lobby</button>
+        <button onClick={() => {
+          socket.emit('leaveEvent');
+          navigate(`/?player=${encodeURIComponent(playerName)}`);
+        }}>Back to Lobby</button>
       </div>
       
       <BigBoard xIsNext={xIsNext} squares={squares} onPlay={handlePlay} />

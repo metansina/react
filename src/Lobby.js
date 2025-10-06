@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import socket from './socket';
 
 export default function Lobby() {
   const [searchParams] = useSearchParams();
@@ -7,7 +8,24 @@ export default function Lobby() {
   
   const [playerName, setPlayerName] = useState(returnedPlayer || '');
   const [isNameSet, setIsNameSet] = useState(!!returnedPlayer);
+  const [events, setEvents] = useState([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isNameSet) {
+      socket.emit('userJoin', playerName);
+      socket.emit('request_to_listEvents');
+    }
+
+    socket.on('response_for_listEvents', (eventsList) => {
+      console.log('Received events:', eventsList);
+      setEvents(eventsList);
+    });
+
+    return () => {
+      socket.off('response_for_listEvents');
+    };
+  }, [isNameSet, playerName]);
 
   const setName = () => {
     if (playerName.trim()) {
@@ -15,9 +33,17 @@ export default function Lobby() {
     }
   };
 
-  const selectGame = (gameType) => {
-    const roomId = Date.now().toString();
-    navigate(`/game/${roomId}?player=${encodeURIComponent(playerName)}&game=${gameType}`);
+  const createEvent = (gameType) => {
+    socket.emit('createEvent', playerName, gameType, (eventId) => {
+      const gameParam = gameType === 'big' ? '&game=big-tic-tac-toe' : '';
+      navigate(`/game/${eventId}?player=${encodeURIComponent(playerName)}${gameParam}`);
+    });
+  };
+
+  const joinEvent = (event) => {
+    socket.emit('joinEvent', event.id);
+    const gameParam = event.gameType === 'big' ? '&game=big-tic-tac-toe' : '';
+    navigate(`/game/${event.id}?player=${encodeURIComponent(playerName)}${gameParam}`);
   };
 
   if (!isNameSet) {
@@ -46,16 +72,29 @@ export default function Lobby() {
       <h1>Welcome, {playerName}!</h1>
       
       <div className="games-list">
-        <h2>Available Games:</h2>
-        <div className="game-item" onClick={() => selectGame('tic-tac-toe')}>
-          <h3>Tic-Tac-Toe</h3>
-          <p>Classic X's and O's game</p>
+        <h2>Create New Game:</h2>
+        <div className="game-item" onClick={() => createEvent('standard')}>
+          <h3>Standard Tic-Tac-Toe</h3>
+          <p>Classic 3x3 board game</p>
         </div>
-        <div className="game-item" onClick={() => selectGame('big-tic-tac-toe')}>
+        <div className="game-item" onClick={() => createEvent('big')}>
           <h3>Big Tic-Tac-Toe</h3>
           <p>30x30 board, get 5 in a row to win</p>
         </div>
       </div>
+      
+      {events.length > 0 && (
+        <div className="events-list">
+          <h2>Join Existing Games: ({events.length})</h2>
+          {events.map(event => (
+            <div key={event.id} className="game-item" onClick={() => joinEvent(event)}>
+              <h3>{event.gameType === 'big' ? 'Big Tic-Tac-Toe' : 'Standard Tic-Tac-Toe'}</h3>
+              <p>Players: {event.players.join(', ')}</p>
+              <p>Created: {new Date(event.createdAt).toLocaleTimeString()}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
