@@ -10,9 +10,9 @@ function BigSquare({value, onSquareClick, isWinning}) {
   );
 }
 
-function BigBoard({xIsNext, squares, onPlay}) {
+function BigBoard({xIsNext, squares, onPlay, canPlay, isMyTurn, playersCount, playerName, players, playerLeft}) {
   function handleClick(i) {
-    if (calculateBigWinner(squares) || squares[i]){
+    if (calculateBigWinner(squares) || squares[i] || !canPlay){
       return;
     }
     const nextSquares = squares.slice();
@@ -29,10 +29,22 @@ function BigBoard({xIsNext, squares, onPlay}) {
   const winningLine = winnerInfo ? winnerInfo.line : [];
   
   let status;
-  if (winner) {
-    status = 'Winner: ' + winner;
+  if (playerLeft) {
+    status = 'Second player left the game, you won!';
+  } else if (winner) {
+    const playerIndex = players.indexOf(playerName);
+    const playerSymbol = playerIndex === 0 ? 'X' : 'O';
+    if (winner === playerSymbol) {
+      status = 'You won! Congratulations!';
+    } else {
+      status = 'You lost! Don\'t worry, try again!';
+    }
+  } else if (playersCount < 2) {
+    status = 'Waiting for second player...';
+  } else if (isMyTurn) {
+    status = 'Your turn!';
   } else {
-    status = 'Next player: ' + (xIsNext ? 'X' : 'O');
+    status = 'Waiting for opponent\'s move...';
   }
 
   const boardRows = [];
@@ -56,9 +68,12 @@ function BigBoard({xIsNext, squares, onPlay}) {
     );
   }
 
+  const isGameOver = winner || playerLeft;
+
   return (
     <div className="big-board-container">
       <div className="status">{status}</div>
+      {isGameOver && <div className="game-over" style={{marginBottom: '20px'}}>Game over. Return to lobby to start another game.</div>}
       <div className="big-board">
         {boardRows}
       </div>
@@ -74,15 +89,45 @@ export default function BigTicTacToe() {
   const playerName = searchParams.get('player');
 
   useEffect(() => {
-    socket.emit('joinEvent', roomId);
+    // First register user, then join event with small delay
+    socket.emit('userJoin', playerName);
+    setTimeout(() => {
+      socket.emit('joinEvent', roomId);
+    }, 100);
+    
+    socket.on('gameState', (gameData) => {
+      setHistory(gameData.history);
+      setCurrentMove(gameData.currentMove);
+      setPlayers(gameData.players);
+    });
+    
+    socket.on('playerLeft', () => {
+      setPlayerLeft(true);
+    });
+    
+    return () => {
+      socket.off('gameState');
+      socket.off('playerLeft');
+    };
   }, [roomId]);
   
-  const [squares, setSquares] = useState(Array(900).fill(null));
-  const [xIsNext, setXIsNext] = useState(true);
+  const [history, setHistory] = useState([Array(900).fill(null)]);
+  const [currentMove, setCurrentMove] = useState(0);
+  const [players, setPlayers] = useState([]);
+  const [playerLeft, setPlayerLeft] = useState(false);
+  const xIsNext = currentMove % 2 === 0;
+  const currentSquares = history[currentMove];
+  
+  const playerIndex = players.indexOf(playerName);
+  const isMyTurn = playerIndex !== -1 && (currentMove % 2) === playerIndex;
+  const canPlay = players.length === 2 && isMyTurn;
 
   function handlePlay(nextSquares) {
-    setSquares(nextSquares);
-    setXIsNext(!xIsNext);
+    const nextHistory = [...history.slice(0, currentMove + 1), nextSquares];
+    const nextMove = nextHistory.length - 1;
+    
+    // send move to server
+    socket.emit('makeMove', roomId, nextHistory, nextMove);
   }
 
   return (
@@ -96,7 +141,7 @@ export default function BigTicTacToe() {
         }}>Back to Lobby</button>
       </div>
       
-      <BigBoard xIsNext={xIsNext} squares={squares} onPlay={handlePlay} />
+      <BigBoard xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay} canPlay={canPlay} isMyTurn={isMyTurn} playersCount={players.length} playerName={playerName} players={players} playerLeft={playerLeft} />
     </div>
   );
 }

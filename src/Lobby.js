@@ -18,7 +18,6 @@ export default function Lobby() {
     }
 
     socket.on('response_for_listEvents', (eventsList) => {
-      console.log('Received events:', eventsList);
       setEvents(eventsList);
     });
 
@@ -85,7 +84,7 @@ export default function Lobby() {
       
       {events.length > 0 && (
         <div className="events-list">
-          <h2>Join Existing Games: ({events.length})</h2>
+          <h2>Join Existing Games:</h2>
           {events.map(event => (
             <div key={event.id} className="game-item" onClick={() => joinEvent(event)}>
               <h3>{event.gameType === 'big' ? 'Big Tic-Tac-Toe' : 'Standard Tic-Tac-Toe'}</h3>

@@ -10,9 +10,9 @@ function Square({value, onSquareClick, isWinning}) {
   );
 }
 
-function Board({xIsNext, squares, onPlay}) {
+function Board({xIsNext, squares, onPlay, canPlay, isMyTurn, playersCount, playerName, players, playerLeft}) {
   function handleClick(i) {
-    if (calculateWinner(squares) || squares[i]){
+    if (calculateWinner(squares) || squares[i] || !canPlay){
       return;
     }
     const nextSquares = squares.slice();
@@ -29,12 +29,24 @@ function Board({xIsNext, squares, onPlay}) {
   const winningLine = winnerInfo ? winnerInfo.line : [];
   
   let status;
-  if (winner) {
-    status = 'Winner: ' + winner;
+  if (playerLeft) {
+    status = 'Second player left the game, you won!';
+  } else if (winner) {
+    const playerIndex = players.indexOf(playerName);
+    const playerSymbol = playerIndex === 0 ? 'X' : 'O';
+    if (winner === playerSymbol) {
+      status = 'You won! Congratulations!';
+    } else {
+      status = 'You lost! Don\'t worry, try again!';
+    }
   } else if (squares.every(square => square !== null)) {
     status = 'Draw!';
+  } else if (playersCount < 2) {
+    status = 'Waiting for second player...';
+  } else if (isMyTurn) {
+    status = 'Your turn!';
   } else {
-    status = 'Next player: ' + (xIsNext ? 'X' : 'O');
+    status = 'Waiting for opponent\'s move...';
   }
 
   const boardRows = [];
@@ -58,9 +70,12 @@ function Board({xIsNext, squares, onPlay}) {
     );
   }
 
+  const isGameOver = winner || squares.every(square => square !== null) || playerLeft;
+
   return (
     <>
       <div className="status">{status}</div>
+      {isGameOver && <div className="game-over" style={{marginBottom: '20px'}}>Game over. Return to lobby to start another game.</div>}
       {boardRows}
     </>
   );
@@ -75,50 +90,52 @@ export default function GameRoom() {
   const isHost = searchParams.get('host') === 'true';
 
   useEffect(() => {
-    socket.emit('joinEvent', roomId);
+
+    
+    // First register user, then join event with small delay
+    socket.emit('userJoin', playerName);
+    setTimeout(() => {
+      socket.emit('joinEvent', roomId);
+    }, 100);
+    
+    socket.on('gameState', (gameData) => {
+      setHistory(gameData.history);
+      setCurrentMove(gameData.currentMove);
+      setPlayers(gameData.players);
+    });
+    
+    socket.on('playerLeft', () => {
+      setPlayerLeft(true);
+    });
+    
+    return () => {
+      socket.off('gameState');
+      socket.off('playerLeft');
+    };
   }, [roomId]);
   
   const [history, setHistory] = useState([Array(9).fill(null)]);
   const [currentMove, setCurrentMove] = useState(0);
+  const [players, setPlayers] = useState([]);
+  const [playerLeft, setPlayerLeft] = useState(false);
   const xIsNext = currentMove % 2 === 0;
   const currentSquares = history[currentMove];
+  
+  const playerIndex = players.indexOf(playerName);
+  const isMyTurn = playerIndex !== -1 && (currentMove % 2) === playerIndex;
+  const canPlay = players.length === 2 && isMyTurn;
+  
+
 
   function handlePlay(nextSquares) {
     const nextHistory = [...history.slice(0, currentMove + 1), nextSquares];
-    setHistory(nextHistory);
-    setCurrentMove(nextHistory.length - 1);
+    const nextMove = nextHistory.length - 1;
+    
+    // send move to server
+    socket.emit('makeMove', roomId, nextHistory, nextMove);
   }
 
-  function jumpTo(nextMove) {
-    setCurrentMove(nextMove);
-  }
 
-  const moves = history.map((squares, move) => {
-    let description;
-    if (move > 0) {
-      const prevSquares = history[move - 1];
-      const moveIndex = squares.findIndex((square, i) => square !== prevSquares[i]);
-      const row = Math.floor(moveIndex / 3) + 1;
-      const col = (moveIndex % 3) + 1;
-      description = `Go to move #${move} (${row}, ${col})`;
-    } else {
-      description = 'Go to game start';
-    }
-    
-    if (move === currentMove) {
-      return (
-        <li key={move}>
-          You are at move #{move}
-        </li>
-      );
-    }
-    
-    return (
-      <li key={move}>
-        <button onClick={() => jumpTo(move)}>{description}</button>
-      </li>
-    );
-  });
 
   return (
     <div className="game-room">
@@ -133,11 +150,9 @@ export default function GameRoom() {
       
       <div className="game">
         <div className="game-board">
-          <Board xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay} />
+          <Board xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay} canPlay={canPlay} isMyTurn={isMyTurn} playersCount={players.length} playerName={playerName} players={players} playerLeft={playerLeft} />
         </div>
-        <div className="game-info">
-          <ol>{moves}</ol>
-        </div>
+
       </div>
     </div>
   );
